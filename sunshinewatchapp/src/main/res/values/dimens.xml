@@ -1,0 +1,6 @@
+
+<resources>
+    <dimen name="rect_corner_radius">20dp</dimen>
+    <dimen name="round_text_view_width">150dp</dimen>
+    <dimen name="round_radius">120dp</dimen>
+</resources>
