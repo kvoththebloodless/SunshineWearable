@@ -28,6 +28,8 @@ import android.widget.TextView;
 import com.example.android.sunshine.utilities.SunshineDateUtils;
 import com.example.android.sunshine.utilities.SunshineWeatherUtils;
 
+import java.util.ArrayList;
+
 /**
  * {@link ForecastAdapter} exposes a list of weather forecasts
  * from a {@link android.database.Cursor} to a {@link android.support.v7.widget.RecyclerView}.
@@ -36,7 +38,7 @@ class ForecastAdapter extends RecyclerView.Adapter<ForecastAdapter.ForecastAdapt
 
     private static final int VIEW_TYPE_TODAY = 0;
     private static final int VIEW_TYPE_FUTURE_DAY = 1;
-
+    private static boolean DATA_SENT_TO_WEARABLE = false;
     /* The context we use to utility methods, app resources and layout inflaters */
     private final Context mContext;
 
@@ -47,14 +49,6 @@ class ForecastAdapter extends RecyclerView.Adapter<ForecastAdapter.ForecastAdapt
      * an item is clicked in the list.
      */
     final private ForecastAdapterOnClickHandler mClickHandler;
-
-    /**
-     * The interface that receives onClick messages.
-     */
-    public interface ForecastAdapterOnClickHandler {
-        void onClick(long date);
-    }
-
     /*
      * Flag to determine if we want to use a separate view for the list item that represents
      * today. This flag will be true when the phone is in portrait mode and false when the phone
@@ -62,7 +56,6 @@ class ForecastAdapter extends RecyclerView.Adapter<ForecastAdapter.ForecastAdapt
      * boolean resources.
      */
     private boolean mUseTodayLayout;
-
     private Cursor mCursor;
 
     /**
@@ -213,6 +206,7 @@ class ForecastAdapter extends RecyclerView.Adapter<ForecastAdapter.ForecastAdapt
          /* Set the text and content description (for accessibility purposes) */
         forecastAdapterViewHolder.lowTempView.setText(lowString);
         forecastAdapterViewHolder.lowTempView.setContentDescription(lowA11y);
+
     }
 
     /**
@@ -257,6 +251,13 @@ class ForecastAdapter extends RecyclerView.Adapter<ForecastAdapter.ForecastAdapt
     void swapCursor(Cursor newCursor) {
         mCursor = newCursor;
         notifyDataSetChanged();
+    }
+
+    /**
+     * The interface that receives onClick messages.
+     */
+    public interface ForecastAdapterOnClickHandler {
+        void onClick(long date);
     }
 
     /**

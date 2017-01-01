@@ -17,8 +17,12 @@ package com.example.android.sunshine;
 
 import android.content.Intent;
 import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.v4.app.LoaderManager;
 import android.support.v4.content.CursorLoader;
 import android.support.v4.content.Loader;
@@ -35,12 +39,26 @@ import android.widget.ProgressBar;
 import com.example.android.sunshine.data.SunshinePreferences;
 import com.example.android.sunshine.data.WeatherContract;
 import com.example.android.sunshine.sync.SunshineSyncUtils;
+import com.example.android.sunshine.utilities.SunshineDateUtils;
+import com.example.android.sunshine.utilities.SunshineWeatherUtils;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.PendingResult;
+import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.wearable.Asset;
+import com.google.android.gms.wearable.DataApi;
+import com.google.android.gms.wearable.PutDataMapRequest;
+import com.google.android.gms.wearable.PutDataRequest;
+import com.google.android.gms.wearable.Wearable;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends AppCompatActivity implements
         LoaderManager.LoaderCallbacks<Cursor>,
-        ForecastAdapter.ForecastAdapterOnClickHandler {
-
-    private final String TAG = MainActivity.class.getSimpleName();
+        ForecastAdapter.ForecastAdapterOnClickHandler, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
 
     /*
      * The columns of data that we are interested in displaying within our MainActivity's list of
@@ -52,7 +70,6 @@ public class MainActivity extends AppCompatActivity implements
             WeatherContract.WeatherEntry.COLUMN_MIN_TEMP,
             WeatherContract.WeatherEntry.COLUMN_WEATHER_ID,
     };
-
     /*
      * We store the indices of the values in the array of Strings above to more quickly be able to
      * access the data from our query. If the order of the Strings above changes, these indices
@@ -62,8 +79,12 @@ public class MainActivity extends AppCompatActivity implements
     public static final int INDEX_WEATHER_MAX_TEMP = 1;
     public static final int INDEX_WEATHER_MIN_TEMP = 2;
     public static final int INDEX_WEATHER_CONDITION_ID = 3;
-
-
+    public static final String[] PATH = {"/today", "/tomm", "/next"};
+    public static final String WEATHER_TODAY = "/today";
+    public static final String WEATHER_TOMORROW = "/tomm";
+    public static final String WEATHER_DAY_AFTER = "/next";
+    public static final String ASSET = "weatherpic";
+    public static final String DATA = "data";
     /*
      * This ID will be used to identify the Loader responsible for loading our weather forecast. In
      * some cases, one Activity can deal with many Loaders. However, in our case, there is only one.
@@ -72,13 +93,46 @@ public class MainActivity extends AppCompatActivity implements
      * it is unique and consistent.
      */
     private static final int ID_FORECAST_LOADER = 44;
-
+    private final String TAG = MainActivity.class.getSimpleName();
+    private boolean nodeConnected = false;
+    private int TIMEOUT_S = 5;
     private ForecastAdapter mForecastAdapter;
     private RecyclerView mRecyclerView;
     private int mPosition = RecyclerView.NO_POSITION;
-
+    private GoogleApiClient mGoogleApiClient;
     private ProgressBar mLoadingIndicator;
+    private Cursor cursor;
 
+    private static Asset toAsset(Bitmap bitmap) {
+        if (bitmap == null)
+            Log.d("nullllllllhaibc", "null");
+        ByteArrayOutputStream byteStream = null;
+        try {
+            byteStream = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteStream);
+            return Asset.createFromBytes(byteStream.toByteArray());
+        } finally {
+            if (null != byteStream) {
+                try {
+                    byteStream.close();
+                } catch (IOException e) {
+
+                }
+            }
+        }
+    }
+
+    @Override
+    protected void onStart() {
+        mGoogleApiClient = new GoogleApiClient.Builder(this)
+                .addApi(Wearable.API)
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                .build();
+
+        mGoogleApiClient.connect();
+        super.onStart();
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -235,11 +289,14 @@ public class MainActivity extends AppCompatActivity implements
     @Override
     public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
 
-
+        cursor = data;
         mForecastAdapter.swapCursor(data);
         if (mPosition == RecyclerView.NO_POSITION) mPosition = 0;
         mRecyclerView.smoothScrollToPosition(mPosition);
-        if (data.getCount() != 0) showWeatherDataView();
+        if (data.getCount() != 0) {
+            showWeatherDataView();
+            prepareWearableData(data);
+        }
     }
 
     /**
@@ -343,4 +400,107 @@ public class MainActivity extends AppCompatActivity implements
 
         return super.onOptionsItemSelected(item);
     }
+
+    @Override
+    public void onConnected(@Nullable Bundle bundle) {
+        nodeConnected = true;
+    }
+
+    @Override
+    public void onConnectionSuspended(int i) {
+        nodeConnected = false;
+    }
+
+    @Override
+    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
+        nodeConnected = false;
+    }
+
+    void sendWearData(final ArrayList<String> forecast, final Asset asset, final int mPosition) {
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                if (!nodeConnected) {
+                    mGoogleApiClient.blockingConnect(TIMEOUT_S, TimeUnit.SECONDS);
+                }
+                if (!nodeConnected) {
+                    Log.d("failedgoogleclient", "Failed to connect to mGoogleApiClient within " + TIMEOUT_S + " seconds");
+                    return;
+                }
+
+                if (mGoogleApiClient.isConnected()) {
+                    Log.d("connnnnnnnnected", "ya");
+                    PutDataMapRequest putDataMapRequest = PutDataMapRequest.create(PATH[mPosition]);
+                    Log.d("pathhhhhhh", PATH[mPosition]);
+                    putDataMapRequest.getDataMap().putStringArrayList(DATA, forecast);
+                    putDataMapRequest.getDataMap().putAsset(ASSET, asset);
+                    Log.d("arraylist", "" + forecast);
+                    Log.d("asset", "" + asset);
+                    PutDataRequest request = putDataMapRequest.asPutDataRequest();
+                    request.setUrgent();
+                    PendingResult<DataApi.DataItemResult> pendingResult =
+                            Wearable.DataApi.putDataItem(mGoogleApiClient, request);
+
+                    pendingResult.setResultCallback(
+                            new ResultCallback<DataApi.DataItemResult>() {
+                                @Override
+                                public void onResult(DataApi.DataItemResult dataItemResult) {
+                                    Log.d("WEAR APP", "APPLICATION Result has come " + dataItemResult.getDataItem().getUri());
+                                }
+                            });
+
+                } else {
+                    Log.d("WEAR APP", "No Google API Client connection");
+                }
+            }
+        }).start();
+    }
+
+    void prepareWearableData(Cursor cursor) {
+        for (int i = 0; i < 3; i++) {
+            cursor.moveToPosition(i);
+
+
+            //asset
+            Bitmap bitmap = BitmapFactory.decodeResource(getResources(), SunshineWeatherUtils
+                    .getSmallArtResourceIdForWeatherCondition(cursor.getInt(MainActivity.INDEX_WEATHER_CONDITION_ID)));
+            Asset asset = toAsset(bitmap);
+
+
+            ArrayList<String> forecastdata = new ArrayList();
+
+            //date
+            long dateInMillis = cursor.getLong(MainActivity.INDEX_WEATHER_DATE);
+            String dateString = SunshineDateUtils.getFriendlyDateString(this, dateInMillis, false);
+
+
+            //DESC
+            String description = SunshineWeatherUtils.getStringForWeatherCondition(getApplicationContext(), cursor.getInt(MainActivity.INDEX_WEATHER_CONDITION_ID));
+
+
+            //HIGH
+            double highInCelsius = cursor.getDouble(MainActivity.INDEX_WEATHER_MAX_TEMP);
+            String highString = SunshineWeatherUtils.formatTemperature(this, highInCelsius);
+
+            //LOW
+            double lowInCelsius = cursor.getDouble(MainActivity.INDEX_WEATHER_MIN_TEMP);
+            String lowString = SunshineWeatherUtils.formatTemperature(this, lowInCelsius);
+
+            forecastdata.add(description);
+            forecastdata.add(highString);
+            forecastdata.add(lowString);
+            forecastdata.add(dateString);
+
+            sendWearData(forecastdata, asset, i);
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        mGoogleApiClient.disconnect();
+        nodeConnected = false;
+        super.onStop();
+    }
+
 }

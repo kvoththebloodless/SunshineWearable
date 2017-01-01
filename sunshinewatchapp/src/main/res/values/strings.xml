@@ -1,5 +1,7 @@
 <resources>
     <string name="app_name">SunshineWatchApp</string>
-    <string name="hello_round">Hello Round World!</string>
-    <string name="hello_square">Hello Square World!</string>
+    <string name="default_date">Default Date</string>
+    <string name="default_MaxtTemp">Max</string>
+    <string name="default_MinTemp">Min</string>
+    <string name="default_desc">No Data</string>
 </resources>
