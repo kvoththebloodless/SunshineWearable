@@ -2,7 +2,8 @@
 
 ## Summary
 
-Built a watch face for Android Wear so users can access Sunshine's weather information at a glance.
+1. Built a watch face for Android Wear so users can access Sunshine's weather information at a glance
+2. Also made an android wear application that displays time, date and temperature.
 
 ## Components 
 - Understand the fundamentals of Android Wear.
